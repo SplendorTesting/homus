@@ -77,7 +77,7 @@ export default function SettingsScreen() {
             <MaterialCommunityIcons name="content-cut" size={28} color={colors.textOnGold} />
           </LinearGradient>
           <Text style={styles.brandName}>Trimmer</Text>
-          <Text style={styles.brandTag}>СТУДИЯ ЗАПИСИ · v1.0</Text>
+          <Text style={styles.brandTag}>версия 1.0</Text>
         </LinearGradient>
 
         {/* Notifications */}

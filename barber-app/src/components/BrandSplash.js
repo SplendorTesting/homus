@@ -61,10 +61,9 @@ export default function BrandSplash({ onDone }) {
         <Animated.View
           style={[
             styles.line,
-            { width: lineW.interpolate({ inputRange: [0, 1], outputRange: [0, 64] }) },
+            { width: lineW.interpolate({ inputRange: [0, 1], outputRange: [0, 56] }) },
           ]}
         />
-        <Text style={styles.tagline}>СТУДИЯ ЗАПИСИ</Text>
       </Animated.View>
     </Animated.View>
   );
@@ -101,13 +100,7 @@ const styles = StyleSheet.create({
   line: {
     height: 1.5,
     backgroundColor: colors.primary,
-    marginVertical: 14,
+    marginTop: 14,
     borderRadius: 1,
-  },
-  tagline: {
-    fontFamily: fonts.semibold,
-    fontSize: 11,
-    letterSpacing: 4,
-    color: colors.primary,
   },
 });
