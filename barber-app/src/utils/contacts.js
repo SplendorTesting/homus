@@ -51,3 +51,27 @@ export function getTodayString() {
   const now = new Date();
   return now.toISOString().split('T')[0];
 }
+
+
+export function addDays(dateStr, days) {
+  const d = new Date((dateStr || getTodayString()) + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+export function dayChipLabel(dateStr) {
+  const today = getTodayString();
+  if (dateStr === today) return 'Сегодня';
+  if (dateStr === addDays(today, 1)) return 'Завтра';
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  return `${days[d.getDay()]}, ${d.getDate()}`;
+}
+
+export const REMINDER_OPTIONS = [
+  { minutes: -1, label: 'Без напоминания', short: 'Выкл' },
+  { minutes: 30, label: 'За 30 минут', short: '30 мин' },
+  { minutes: 60, label: 'За 1 час', short: '1 час' },
+  { minutes: 120, label: 'За 2 часа', short: '2 часа' },
+  { minutes: 1440, label: 'За день', short: '1 день' },
+];

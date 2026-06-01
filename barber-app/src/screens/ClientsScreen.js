@@ -1,11 +1,16 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, typography, shadows } from '../theme/colors';
+import * as Haptics from 'expo-haptics';
+import { colors, spacing, radius, typography, fonts, gradients, shadows } from '../theme/colors';
 import { getAllClients, searchClients } from '../database/db';
 import Avatar from '../components/Avatar';
 import ContactButton from '../components/ContactButton';
+import Header from '../components/Header';
+import EmptyState from '../components/EmptyState';
+import Button from '../components/Button';
 
 export default function ClientsScreen({ navigation }) {
   const [clients, setClients] = useState([]);
@@ -16,58 +21,61 @@ export default function ClientsScreen({ navigation }) {
     setClients(data);
   }, [search]);
 
-  useFocusEffect(useCallback(() => {
-    loadClients();
-  }, [loadClients]));
+  useFocusEffect(useCallback(() => { loadClients(); }, [loadClients]));
 
   const renderClient = ({ item }) => (
-    <TouchableOpacity
-      style={styles.clientCard}
+    <Pressable
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       onPress={() => navigation.navigate('ClientProfile', { clientId: item.id })}
-      activeOpacity={0.7}
     >
-      <Avatar name={item.name} color={item.avatar_color} size={50} />
-      <View style={styles.clientInfo}>
-        <Text style={styles.clientName}>{item.name}</Text>
-        {item.haircut_description && (
-          <Text style={styles.clientDesc} numberOfLines={1}>{item.haircut_description}</Text>
+      <Avatar name={item.name} color={item.avatar_color} size={52} ring />
+      <View style={styles.info}>
+        <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+        {item.haircut_description ? (
+          <Text style={styles.desc} numberOfLines={1}>{item.haircut_description}</Text>
+        ) : (
+          <Text style={styles.descMuted}>Профиль клиента</Text>
         )}
-        <View style={styles.contactRow}>
-          <ContactButton type="phone" value={item.phone} size={30} />
-          <ContactButton type="whatsapp" value={item.whatsapp} size={30} />
-          <ContactButton type="telegram" value={item.telegram} size={30} />
-        </View>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-    </TouchableOpacity>
+      <View style={styles.contactRow}>
+        <ContactButton type="phone" value={item.phone} size={34} />
+        <ContactButton type="whatsapp" value={item.whatsapp} size={34} />
+        <ContactButton type="telegram" value={item.telegram} size={34} />
+      </View>
+    </Pressable>
   );
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Клиенты</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => navigation.navigate('AddClient')}
-        >
-          <Ionicons name="person-add" size={20} color={colors.background} />
-        </TouchableOpacity>
-      </View>
+      <Header
+        eyebrow={`${clients.length} ${plural(clients.length)}`}
+        title="Клиенты"
+        right={
+          <Pressable
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); navigation.navigate('AddClient'); }}
+            style={({ pressed }) => [pressed && styles.pressed]}
+          >
+            <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.addBtn, shadows.gold]}>
+              <Ionicons name="add" size={24} color={colors.textOnGold} />
+            </LinearGradient>
+          </Pressable>
+        }
+      />
 
       {/* Search */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={colors.textMuted} style={styles.searchIcon} />
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={18} color={colors.textMuted} />
         <TextInput
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Поиск клиентов..."
+          placeholder="Поиск по имени или телефону"
           placeholderTextColor={colors.textMuted}
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
+          <Pressable onPress={() => setSearch('')}>
+            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+          </Pressable>
         )}
       </View>
 
@@ -75,121 +83,65 @@ export default function ClientsScreen({ navigation }) {
         data={clients}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderClient}
-        style={styles.list}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={48} color={colors.textMuted} />
-            <Text style={styles.emptyText}>
-              {search ? 'Никого не найдено' : 'Добавьте первого клиента'}
-            </Text>
-            {!search && (
-              <TouchableOpacity
-                style={styles.emptyButton}
-                onPress={() => navigation.navigate('AddClient')}
-              >
-                <Text style={styles.emptyButtonText}>Добавить клиента</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <EmptyState
+            icon="people-outline"
+            title={search ? 'Ничего не найдено' : 'Пока нет клиентов'}
+            subtitle={search ? 'Попробуйте изменить запрос' : 'Создайте первую карточку клиента — с контактами, причёской и пожеланиями.'}
+            action={!search ? <Button title="Добавить клиента" icon="person-add" onPress={() => navigation.navigate('AddClient')} /> : null}
+          />
         }
       />
     </View>
   );
 }
 
+function plural(n) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'клиент';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'клиента';
+  return 'клиентов';
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingTop: 60,
-    paddingBottom: spacing.md,
-  },
-  title: {
-    ...typography.h1,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
   addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...shadows.gold,
+    width: 46, height: 46, borderRadius: 23,
+    alignItems: 'center', justifyContent: 'center',
   },
-  searchContainer: {
+  searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
     marginHorizontal: spacing.xl,
-    marginVertical: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
     paddingHorizontal: spacing.lg,
-    height: 48,
+    height: 50,
   },
-  searchIcon: {
-    marginRight: spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 15,
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xxl,
-  },
-  clientCard: {
+  searchInput: { flex: 1, color: colors.text, fontFamily: fonts.medium, fontSize: 15 },
+  listContent: { paddingHorizontal: spacing.xl, paddingBottom: 110 },
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    paddingRight: spacing.lg,
     marginBottom: spacing.md,
   },
-  clientInfo: {
-    flex: 1,
-    marginLeft: spacing.lg,
-  },
-  clientName: {
-    ...typography.body,
-    fontWeight: '600',
-  },
-  clientDesc: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  contactRow: {
-    flexDirection: 'row',
-    marginTop: spacing.sm,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxxl * 2,
-  },
-  emptyText: {
-    ...typography.bodySecondary,
-    marginTop: spacing.md,
-  },
-  emptyButton: {
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.primaryFaded,
-    borderRadius: borderRadius.md,
-  },
-  emptyButtonText: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  info: { flex: 1, marginLeft: spacing.lg, marginRight: spacing.sm },
+  name: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
+  desc: { ...typography.bodySecondary, marginTop: 3 },
+  descMuted: { ...typography.caption, marginTop: 3 },
+  contactRow: { flexDirection: 'row', gap: spacing.xs },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
 });

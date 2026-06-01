@@ -1,14 +1,16 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, typography, shadows } from '../theme/colors';
+import * as Haptics from 'expo-haptics';
+import { colors, spacing, radius, typography, fonts, gradients, shadows } from '../theme/colors';
 import { getAppointmentsByDate, getAppointmentDates } from '../database/db';
 import { getTodayString, formatTime, formatDateFull } from '../utils/contacts';
 import Avatar from '../components/Avatar';
+import EmptyState from '../components/EmptyState';
 
-// Configure Russian locale
 LocaleConfig.locales['ru'] = {
   monthNames: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
   monthNamesShort: ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'],
@@ -18,39 +20,32 @@ LocaleConfig.locales['ru'] = {
 };
 LocaleConfig.defaultLocale = 'ru';
 
+const STATUS_COLOR = {
+  scheduled: colors.primary,
+  completed: colors.success,
+  cancelled: colors.danger,
+};
+
 export default function CalendarScreen({ navigation, route }) {
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [appointments, setAppointments] = useState([]);
   const [markedDates, setMarkedDates] = useState({});
-  const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const loadAppointments = useCallback(async (date) => {
-    const data = await getAppointmentsByDate(date);
-    setAppointments(data);
+    setAppointments(await getAppointmentsByDate(date));
   }, []);
 
   const loadMarkedDates = useCallback(async (month, year) => {
     const dates = await getAppointmentDates(month, year);
     const marks = {};
-    dates.forEach(d => {
-      marks[d.date] = {
-        marked: true,
-        dotColor: colors.primary,
-      };
-    });
-    // Add selected date marking
-    marks[selectedDate] = {
-      ...marks[selectedDate],
-      selected: true,
-      selectedColor: colors.primary,
-    };
+    dates.forEach(d => { marks[d.date] = { marked: true, dotColor: colors.primary }; });
     setMarkedDates(marks);
-  }, [selectedDate]);
+  }, []);
 
   useFocusEffect(useCallback(() => {
     loadAppointments(selectedDate);
-    const date = new Date(selectedDate);
-    loadMarkedDates(date.getMonth() + 1, date.getFullYear());
+    const d = new Date(selectedDate);
+    loadMarkedDates(d.getMonth() + 1, d.getFullYear());
   }, [selectedDate, loadAppointments, loadMarkedDates]));
 
   useEffect(() => {
@@ -61,112 +56,120 @@ export default function CalendarScreen({ navigation, route }) {
   }, [route?.params?.openAdd]);
 
   const onDayPress = (day) => {
+    Haptics.selectionAsync();
     setSelectedDate(day.dateString);
   };
 
-  const onMonthChange = (month) => {
-    setCurrentMonth(new Date(month.dateString));
-    loadMarkedDates(month.month, month.year);
+  const goAdd = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('AddAppointment', { date: selectedDate });
   };
 
-  const renderAppointment = ({ item }) => (
-    <TouchableOpacity
-      style={styles.appointmentCard}
-      onPress={() => navigation.navigate('EditAppointment', { appointmentId: item.id })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.timeStrip}>
-        <View style={[styles.timeStripLine, { backgroundColor: item.status === 'completed' ? colors.success : colors.primary }]} />
-      </View>
-      <View style={styles.timeColumn}>
-        <Text style={styles.timeStart}>{formatTime(item.time_start)}</Text>
-        {item.time_end && <Text style={styles.timeEnd}>{formatTime(item.time_end)}</Text>}
-      </View>
-      <View style={styles.cardContent}>
-        <View style={styles.cardRow}>
+  const isToday = selectedDate === getTodayString();
+
+  const renderAppointment = ({ item, index }) => {
+    const color = STATUS_COLOR[item.status] || colors.primary;
+    return (
+      <Pressable
+        style={({ pressed }) => [styles.aptRow, pressed && styles.pressed]}
+        onPress={() => navigation.navigate('EditAppointment', { appointmentId: item.id })}
+      >
+        <View style={styles.timeCol}>
+          <Text style={[styles.timeStart, { color }]}>{formatTime(item.time_start)}</Text>
+          {item.time_end ? <Text style={styles.timeEnd}>{formatTime(item.time_end)}</Text> : null}
+        </View>
+        <View style={styles.track}>
+          <View style={[styles.trackDot, { backgroundColor: color, borderColor: color + '40' }]} />
+          {index < appointments.length - 1 && <View style={styles.trackLine} />}
+        </View>
+        <View style={[styles.card, item.status === 'completed' && styles.cardDone]}>
           <Avatar
             name={item.is_walkin ? item.walkin_name : item.client_name}
             color={item.avatar_color || colors.textMuted}
-            size={40}
+            size={44}
           />
           <View style={styles.cardInfo}>
-            <Text style={styles.cardName}>
-              {item.is_walkin ? (item.walkin_name || 'Проходящий клиент') : item.client_name}
-              {item.is_walkin && <Text style={styles.walkinBadge}> (прохожий)</Text>}
+            <Text style={[styles.cardName, item.status === 'cancelled' && styles.strike]} numberOfLines={1}>
+              {item.is_walkin ? (item.walkin_name || 'Гость') : item.client_name}
             </Text>
-            {item.service && <Text style={styles.cardService}>{item.service}</Text>}
-            {item.notes && <Text style={styles.cardNotes} numberOfLines={1}>{item.notes}</Text>}
+            {item.service ? <Text style={styles.cardService} numberOfLines={1}>{item.service}</Text> : null}
+            {item.is_walkin ? <Text style={styles.guestBadge}>гость</Text> : null}
           </View>
+          {item.status === 'completed' && <Ionicons name="checkmark-circle" size={20} color={colors.success} />}
         </View>
-      </View>
-      <TouchableOpacity
-        style={styles.moreButton}
-        onPress={() => navigation.navigate('EditAppointment', { appointmentId: item.id })}
-      >
-        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
+      </Pressable>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Календарь</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => navigation.navigate('AddAppointment', { date: selectedDate })}
-        >
-          <Ionicons name="add" size={24} color={colors.background} />
-        </TouchableOpacity>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.eyebrow}>РАСПИСАНИЕ</Text>
+          <Text style={styles.title}>Календарь</Text>
+        </View>
+        <Pressable onPress={goAdd} style={({ pressed }) => [pressed && styles.pressed]}>
+          <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.addBtn, shadows.gold]}>
+            <Ionicons name="add" size={24} color={colors.textOnGold} />
+          </LinearGradient>
+        </Pressable>
       </View>
 
-      <Calendar
-        current={selectedDate}
-        onDayPress={onDayPress}
-        onMonthChange={onMonthChange}
-        markedDates={{
-          ...markedDates,
-          [selectedDate]: { ...markedDates[selectedDate], selected: true, selectedColor: colors.primary },
-        }}
-        firstDay={1}
-        theme={{
-          calendarBackground: colors.background,
-          textSectionTitleColor: colors.textSecondary,
-          selectedDayBackgroundColor: colors.primary,
-          selectedDayTextColor: colors.background,
-          todayTextColor: colors.primary,
-          dayTextColor: colors.text,
-          textDisabledColor: colors.textMuted,
-          dotColor: colors.primary,
-          selectedDotColor: colors.background,
-          arrowColor: colors.primary,
-          monthTextColor: colors.text,
-          textDayFontWeight: '500',
-          textMonthFontWeight: '700',
-          textDayHeaderFontWeight: '600',
-          textDayFontSize: 15,
-          textMonthFontSize: 18,
-          textDayHeaderFontSize: 13,
-        }}
-        style={styles.calendar}
-      />
+      <View style={styles.calendarCard}>
+        <Calendar
+          current={selectedDate}
+          onDayPress={onDayPress}
+          onMonthChange={(m) => loadMarkedDates(m.month, m.year)}
+          markedDates={{
+            ...markedDates,
+            [selectedDate]: { ...markedDates[selectedDate], selected: true, selectedColor: colors.primary },
+          }}
+          firstDay={1}
+          enableSwipeMonths
+          theme={{
+            calendarBackground: 'transparent',
+            textSectionTitleColor: colors.textMuted,
+            selectedDayBackgroundColor: colors.primary,
+            selectedDayTextColor: colors.textOnGold,
+            todayTextColor: colors.primary,
+            dayTextColor: colors.text,
+            textDisabledColor: colors.textMuted,
+            dotColor: colors.primary,
+            selectedDotColor: colors.textOnGold,
+            arrowColor: colors.primary,
+            monthTextColor: colors.text,
+            textDayFontFamily: fonts.medium,
+            textMonthFontFamily: fonts.displayBold,
+            textDayHeaderFontFamily: fonts.semibold,
+            textDayFontSize: 15,
+            textMonthFontSize: 19,
+            textDayHeaderFontSize: 12,
+          }}
+        />
+      </View>
 
       <View style={styles.dayHeader}>
-        <Text style={styles.dayTitle}>{formatDateFull(selectedDate)}</Text>
-        <Text style={styles.dayCount}>{appointments.length} записей</Text>
+        <View style={styles.dayHeaderLeft}>
+          <Text style={styles.dayTitle}>{isToday ? 'Сегодня' : formatDateFull(selectedDate)}</Text>
+          {isToday ? <Text style={styles.daySub}>{formatDateFull(selectedDate)}</Text> : null}
+        </View>
+        <View style={styles.countPill}>
+          <Text style={styles.countText}>{appointments.length}</Text>
+        </View>
       </View>
 
       <FlatList
         data={appointments}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderAppointment}
-        style={styles.list}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="checkmark-circle-outline" size={40} color={colors.textMuted} />
-            <Text style={styles.emptyText}>Нет записей на этот день</Text>
-          </View>
+          <EmptyState
+            icon="cafe-outline"
+            title="Нет записей"
+            subtitle="В этот день у вас пока нет записей."
+          />
         }
       />
     </View>
@@ -174,33 +177,26 @@ export default function CalendarScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
+  container: { flex: 1, backgroundColor: colors.background },
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingHorizontal: spacing.xl,
-    paddingTop: 60,
-    paddingBottom: spacing.md,
+    paddingTop: 64,
+    paddingBottom: spacing.lg,
   },
-  title: {
-    ...typography.h1,
-  },
-  addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...shadows.gold,
-  },
-  calendar: {
-    marginHorizontal: spacing.md,
-    borderRadius: borderRadius.lg,
+  eyebrow: { ...typography.label, color: colors.primary, marginBottom: 6 },
+  title: { fontFamily: fonts.displayBold, fontSize: 32, color: colors.text },
+  addBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  calendarCard: {
+    marginHorizontal: spacing.xl,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
     overflow: 'hidden',
   },
   dayHeader: {
@@ -208,97 +204,47 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    marginTop: spacing.md,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
   },
-  dayTitle: {
-    ...typography.body,
-    fontWeight: '600',
-    textTransform: 'capitalize',
+  dayHeaderLeft: {},
+  dayTitle: { fontFamily: fonts.heading, fontSize: 18, color: colors.text, textTransform: 'capitalize' },
+  daySub: { ...typography.caption, marginTop: 2, textTransform: 'capitalize' },
+  countPill: {
+    minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 10,
+    backgroundColor: colors.primaryFaded,
+    borderWidth: 1, borderColor: colors.borderGold,
+    alignItems: 'center', justifyContent: 'center',
   },
-  dayCount: {
-    ...typography.caption,
-    color: colors.primary,
-  },
-  list: {
+  countText: { fontFamily: fonts.heading, fontSize: 14, color: colors.primary },
+  listContent: { paddingHorizontal: spacing.xl, paddingBottom: 120 },
+  aptRow: { flexDirection: 'row' },
+  timeCol: { width: 48, alignItems: 'flex-end', paddingRight: spacing.sm, paddingTop: 4 },
+  timeStart: { fontFamily: fonts.heading, fontSize: 13 },
+  timeEnd: { ...typography.caption, fontSize: 11, marginTop: 2 },
+  track: { width: 22, alignItems: 'center' },
+  trackDot: { width: 11, height: 11, borderRadius: 6, marginTop: 5, borderWidth: 3 },
+  trackLine: { width: 2, flex: 1, backgroundColor: colors.border, marginVertical: 2 },
+  card: {
     flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xxl,
-  },
-  appointmentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  timeStrip: {
-    marginRight: spacing.md,
-  },
-  timeStripLine: {
-    width: 3,
-    height: 40,
-    borderRadius: 2,
-  },
-  timeColumn: {
-    width: 50,
-    marginRight: spacing.md,
-  },
-  timeStart: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.text,
-    fontSize: 14,
-  },
-  timeEnd: {
-    ...typography.caption,
-    marginTop: 2,
-  },
-  cardContent: {
-    flex: 1,
-  },
-  cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  cardInfo: {
-    flex: 1,
+  cardDone: { opacity: 0.55 },
+  cardInfo: { flex: 1 },
+  cardName: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  strike: { textDecorationLine: 'line-through', color: colors.textMuted },
+  cardService: { ...typography.caption, marginTop: 2 },
+  guestBadge: {
+    ...typography.caption, color: colors.primary, marginTop: 4,
+    fontSize: 10, letterSpacing: 0.5,
   },
-  cardName: {
-    ...typography.body,
-    fontWeight: '600',
-  },
-  walkinBadge: {
-    color: colors.textMuted,
-    fontWeight: '400',
-    fontSize: 12,
-  },
-  cardService: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  cardNotes: {
-    ...typography.caption,
-    color: colors.textMuted,
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  moreButton: {
-    padding: spacing.sm,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxxl,
-  },
-  emptyText: {
-    ...typography.bodySecondary,
-    marginTop: spacing.md,
-  },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
 });

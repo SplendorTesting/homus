@@ -1,147 +1,78 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, typography } from '../theme/colors';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { colors, spacing, radius, fonts } from '../theme/colors';
 import { getClient, updateClient } from '../database/db';
+import Header from '../components/Header';
+import Field from '../components/Field';
+import Button from '../components/Button';
 
 export default function EditClientScreen({ navigation, route }) {
   const { clientId } = route.params;
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [telegram, setTelegram] = useState('');
-  const [haircutDescription, setHaircutDescription] = useState('');
-  const [preferences, setPreferences] = useState('');
-  const [notes, setNotes] = useState('');
-  const [loaded, setLoaded] = useState(false);
+  const [form, setForm] = useState(null);
 
-  useEffect(() => {
-    loadClient();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const loadClient = async () => {
+  const load = async () => {
     const c = await getClient(clientId);
-    if (c) {
-      setName(c.name || '');
-      setPhone(c.phone || '');
-      setWhatsapp(c.whatsapp || '');
-      setTelegram(c.telegram || '');
-      setHaircutDescription(c.haircut_description || '');
-      setPreferences(c.preferences || '');
-      setNotes(c.notes || '');
-    }
-    setLoaded(true);
+    setForm({
+      name: c?.name || '', phone: c?.phone || '', whatsapp: c?.whatsapp || '',
+      telegram: c?.telegram || '', haircut: c?.haircut_description || '',
+      preferences: c?.preferences || '', notes: c?.notes || '',
+    });
   };
+
+  const set = (key) => (val) => setForm((f) => ({ ...f, [key]: val }));
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert('Ошибка', 'Введите имя клиента');
-      return;
-    }
-
-    try {
-      await updateClient(clientId, {
-        name: name.trim(),
-        phone: phone.trim(),
-        whatsapp: whatsapp.trim(),
-        telegram: telegram.trim(),
-        haircut_description: haircutDescription.trim(),
-        preferences: preferences.trim(),
-        notes: notes.trim(),
-      });
-      navigation.goBack();
-    } catch (e) {
-      Alert.alert('Ошибка', 'Не удалось обновить клиента');
-    }
+    if (!form.name.trim()) { Alert.alert('Введите имя'); return; }
+    await updateClient(clientId, {
+      name: form.name.trim(), phone: form.phone.trim(), whatsapp: form.whatsapp.trim(),
+      telegram: form.telegram.trim(), haircut_description: form.haircut.trim(),
+      preferences: form.preferences.trim(), notes: form.notes.trim(),
+    });
+    navigation.goBack();
   };
 
-  if (!loaded) return <View style={styles.container}><Text style={styles.loading}>Загрузка...</Text></View>;
+  if (!form) {
+    return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Редактировать</Text>
-        <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
-          <Text style={styles.saveBtnText}>Сохранить</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.form} contentContainerStyle={styles.formContent}>
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Основное</Text>
-          <View style={styles.field}>
-            <Text style={styles.label}>Имя *</Text>
-            <TextInput style={styles.input} value={name} onChangeText={setName} placeholderTextColor={colors.textMuted} />
+      <Header title="Редактировать" onBack={() => navigation.goBack()} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Основное</Text>
+            <Field label="Имя" value={form.name} onChangeText={set('name')} />
           </View>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Контакты</Text>
-          <View style={styles.field}>
-            <View style={styles.labelRow}>
-              <Ionicons name="call" size={16} color={colors.phone} />
-              <Text style={styles.label}>Телефон</Text>
-            </View>
-            <TextInput style={styles.input} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholderTextColor={colors.textMuted} />
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Контакты</Text>
+            <Field label="Телефон" icon="call" iconColor={colors.phone} value={form.phone} onChangeText={set('phone')} keyboardType="phone-pad" />
+            <Field label="WhatsApp" icon="logo-whatsapp" iconColor={colors.whatsapp} value={form.whatsapp} onChangeText={set('whatsapp')} keyboardType="phone-pad" />
+            <Field label="Telegram" icon="paper-plane" iconColor={colors.telegram} value={form.telegram} onChangeText={set('telegram')} />
           </View>
-          <View style={styles.field}>
-            <View style={styles.labelRow}>
-              <Ionicons name="logo-whatsapp" size={16} color={colors.whatsapp} />
-              <Text style={styles.label}>WhatsApp</Text>
-            </View>
-            <TextInput style={styles.input} value={whatsapp} onChangeText={setWhatsapp} keyboardType="phone-pad" placeholderTextColor={colors.textMuted} />
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Причёска и пожелания</Text>
+            <Field label="Описание причёски" icon="cut" value={form.haircut} onChangeText={set('haircut')} multiline />
+            <Field label="Пожелания" icon="heart" iconColor={colors.danger} value={form.preferences} onChangeText={set('preferences')} multiline />
+            <Field label="Заметки" icon="document-text" iconColor={colors.info} value={form.notes} onChangeText={set('notes')} multiline />
           </View>
-          <View style={styles.field}>
-            <View style={styles.labelRow}>
-              <Ionicons name="paper-plane" size={16} color={colors.telegram} />
-              <Text style={styles.label}>Telegram</Text>
-            </View>
-            <TextInput style={styles.input} value={telegram} onChangeText={setTelegram} placeholderTextColor={colors.textMuted} />
-          </View>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Причёска и пожелания</Text>
-          <View style={styles.field}>
-            <Text style={styles.label}>Описание причёски</Text>
-            <TextInput style={[styles.input, styles.textArea]} value={haircutDescription} onChangeText={setHaircutDescription} multiline placeholderTextColor={colors.textMuted} />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>Пожелания</Text>
-            <TextInput style={[styles.input, styles.textArea]} value={preferences} onChangeText={setPreferences} multiline placeholderTextColor={colors.textMuted} />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>Заметки</Text>
-            <TextInput style={[styles.input, styles.textArea]} value={notes} onChangeText={setNotes} multiline placeholderTextColor={colors.textMuted} />
-          </View>
-        </View>
-      </ScrollView>
+          <Button title="Сохранить изменения" icon="checkmark" onPress={handleSave} fullWidth size="lg" />
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  loading: { ...typography.body, textAlign: 'center', marginTop: 100 },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: spacing.xl, paddingTop: 60, paddingBottom: spacing.lg,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+  center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingHorizontal: spacing.xl, paddingBottom: 40, gap: spacing.xl },
+  section: {
+    backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1,
+    borderColor: colors.border, padding: spacing.lg, gap: spacing.lg,
   },
-  backBtn: { padding: spacing.sm },
-  title: { ...typography.h3 },
-  saveBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: borderRadius.md },
-  saveBtnText: { color: colors.background, fontWeight: '700', fontSize: 14 },
-  form: { flex: 1 },
-  formContent: { padding: spacing.xl, gap: spacing.xl, paddingBottom: 100 },
-  sectionCard: { backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: spacing.lg, gap: spacing.lg },
-  sectionLabel: { ...typography.caption, color: colors.primary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  field: { gap: spacing.sm },
-  label: { ...typography.bodySecondary, fontWeight: '600', color: colors.textSecondary },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  input: { backgroundColor: colors.surfaceLight, borderRadius: borderRadius.md, padding: spacing.lg, color: colors.text, fontSize: 15 },
-  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  sectionLabel: { fontFamily: fonts.displayBold, fontSize: 17, color: colors.text },
 });
