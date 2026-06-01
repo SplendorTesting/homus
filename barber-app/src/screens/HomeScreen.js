@@ -1,11 +1,22 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, typography, shadows } from '../theme/colors';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { colors, spacing, radius, typography, fonts, gradients, shadows } from '../theme/colors';
 import { getAppointmentsByDate, getTodayAppointmentsCount, getTotalClients } from '../database/db';
 import { getTodayString, formatTime, formatDateFull } from '../utils/contacts';
 import Avatar from '../components/Avatar';
+import EmptyState from '../components/EmptyState';
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 6) return 'Доброй ночи';
+  if (h < 12) return 'Доброе утро';
+  if (h < 18) return 'Добрый день';
+  return 'Добрый вечер';
+}
 
 export default function HomeScreen({ navigation }) {
   const [todayAppointments, setTodayAppointments] = useState([]);
@@ -25,9 +36,7 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    loadData();
-  }, [loadData]));
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -36,249 +45,299 @@ export default function HomeScreen({ navigation }) {
   };
 
   const today = getTodayString();
+  const nextApt = todayAppointments.find(a => a.status === 'scheduled');
+  const completed = todayAppointments.filter(a => a.status === 'completed').length;
+
+  const goAdd = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('Calendar', { screen: 'AddAppointment', params: { date: today } });
+  };
 
   return (
     <View style={styles.container}>
       <ScrollView
-        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Добрый день</Text>
-            <Text style={styles.dateText}>{formatDateFull(today)}</Text>
+        {/* Hero */}
+        <LinearGradient colors={gradients.hero} style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View>
+              <Text style={styles.brandRow}>
+                <Text style={styles.brand}>Trimmer</Text>
+              </Text>
+              <Text style={styles.greeting}>{greeting()}</Text>
+            </View>
+            <View style={styles.logoBadge}>
+              <MaterialCommunityIcons name="content-cut" size={20} color={colors.primary} />
+            </View>
           </View>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('Calendar', { screen: 'CalendarMain', params: { openAdd: true } })}
-          >
-            <Ionicons name="add" size={24} color={colors.background} />
-          </TouchableOpacity>
-        </View>
 
-        {/* Stats Cards */}
+          <Text style={styles.dateText}>{formatDateFull(today)}</Text>
+
+          {/* Next appointment highlight */}
+          {nextApt ? (
+            <Pressable
+              style={({ pressed }) => [styles.nextCard, pressed && styles.pressed]}
+              onPress={() => navigation.navigate('Calendar', { screen: 'EditAppointment', params: { appointmentId: nextApt.id } })}
+            >
+              <View style={styles.nextLeft}>
+                <Text style={styles.nextLabel}>СЛЕДУЮЩАЯ ЗАПИСЬ</Text>
+                <Text style={styles.nextName}>
+                  {nextApt.is_walkin ? (nextApt.walkin_name || 'Гость') : nextApt.client_name}
+                </Text>
+                {nextApt.service ? <Text style={styles.nextService}>{nextApt.service}</Text> : null}
+              </View>
+              <View style={styles.nextTime}>
+                <Text style={styles.nextTimeText}>{formatTime(nextApt.time_start)}</Text>
+                <Ionicons name="arrow-forward" size={16} color={colors.primary} />
+              </View>
+            </Pressable>
+          ) : (
+            <View style={styles.nextCardEmpty}>
+              <Ionicons name="checkmark-done-circle-outline" size={20} color={colors.primary} />
+              <Text style={styles.nextEmptyText}>На сегодня записей больше нет</Text>
+            </View>
+          )}
+        </LinearGradient>
+
+        {/* Stats */}
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, styles.statCardPrimary]}>
-            <Ionicons name="today-outline" size={24} color={colors.primary} />
-            <Text style={styles.statNumber}>{stats.today}</Text>
-            <Text style={styles.statLabel}>Сегодня</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Ionicons name="people-outline" size={24} color={colors.info} />
-            <Text style={styles.statNumber}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Клиентов</Text>
-          </View>
+          <StatCard icon="today-outline" value={stats.today} label="Сегодня" tint={colors.primary} />
+          <StatCard icon="checkmark-circle-outline" value={completed} label="Завершено" tint={colors.success} />
+          <StatCard icon="people-outline" value={stats.total} label="Клиентов" tint={colors.info} />
         </View>
 
-        {/* Today's Schedule */}
+        {/* Quick actions */}
+        <View style={styles.actionsRow}>
+          <QuickAction icon="add-circle" label="Новая запись" onPress={goAdd} primary />
+          <QuickAction icon="person-add-outline" label="Клиент" onPress={() => navigation.navigate('Clients', { screen: 'AddClient' })} />
+        </View>
+
+        {/* Schedule */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Расписание на сегодня</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Calendar')}>
+            <Text style={styles.sectionTitle}>Сегодня</Text>
+            <Pressable onPress={() => navigation.navigate('Calendar')}>
               <Text style={styles.seeAll}>Календарь</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
 
           {todayAppointments.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="calendar-outline" size={48} color={colors.textMuted} />
-              <Text style={styles.emptyText}>Записей на сегодня нет</Text>
-              <TouchableOpacity
-                style={styles.emptyButton}
-                onPress={() => navigation.navigate('Calendar', { screen: 'CalendarMain', params: { openAdd: true } })}
-              >
-                <Text style={styles.emptyButtonText}>Добавить запись</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              icon="calendar-outline"
+              title="Свободный день"
+              subtitle="Записей на сегодня пока нет. Добавьте первую запись."
+            />
           ) : (
-            todayAppointments.map((apt) => (
-              <TouchableOpacity
+            todayAppointments.map((apt, idx) => (
+              <Pressable
                 key={apt.id}
-                style={styles.appointmentCard}
-                onPress={() => navigation.navigate('Calendar', { 
-                  screen: 'EditAppointment', 
-                  params: { appointmentId: apt.id } 
-                })}
-                activeOpacity={0.7}
+                style={({ pressed }) => [styles.aptRow, pressed && styles.pressed]}
+                onPress={() => navigation.navigate('Calendar', { screen: 'EditAppointment', params: { appointmentId: apt.id } })}
               >
-                <View style={styles.timeBlock}>
-                  <Text style={styles.timeText}>{formatTime(apt.time_start)}</Text>
-                  {apt.time_end && <Text style={styles.timeEndText}>{formatTime(apt.time_end)}</Text>}
-                </View>
-                <View style={styles.appointmentInfo}>
-                  <View style={styles.appointmentRow}>
-                    <Avatar
-                      name={apt.is_walkin ? apt.walkin_name : apt.client_name}
-                      color={apt.avatar_color || colors.textMuted}
-                      size={36}
-                    />
-                    <View style={styles.appointmentDetails}>
-                      <Text style={styles.clientName}>
-                        {apt.is_walkin ? `${apt.walkin_name || 'Проходящий'}` : apt.client_name}
-                      </Text>
-                      {apt.service && <Text style={styles.serviceText}>{apt.service}</Text>}
-                    </View>
+                <View style={styles.timeCol}>
+                  <Text style={[styles.timeText, apt.status === 'completed' && styles.timeDone]}>
+                    {formatTime(apt.time_start)}
+                  </Text>
+                  <View style={styles.timeTrack}>
+                    <View style={[styles.timeDot, {
+                      backgroundColor: apt.status === 'completed' ? colors.success
+                        : apt.status === 'cancelled' ? colors.danger : colors.primary,
+                    }]} />
+                    {idx < todayAppointments.length - 1 && <View style={styles.timeLine} />}
                   </View>
                 </View>
-                <View style={[styles.statusDot, { 
-                  backgroundColor: apt.status === 'completed' ? colors.success 
-                    : apt.status === 'cancelled' ? colors.danger 
-                    : colors.primary 
-                }]} />
-              </TouchableOpacity>
+                <View style={[styles.aptCard, apt.status === 'completed' && styles.aptCardDone]}>
+                  <Avatar
+                    name={apt.is_walkin ? apt.walkin_name : apt.client_name}
+                    color={apt.avatar_color || colors.textMuted}
+                    size={42}
+                  />
+                  <View style={styles.aptInfo}>
+                    <Text style={[styles.aptName, apt.status === 'cancelled' && styles.strike]} numberOfLines={1}>
+                      {apt.is_walkin ? (apt.walkin_name || 'Гость') : apt.client_name}
+                      {apt.is_walkin ? <Text style={styles.guestTag}>  гость</Text> : null}
+                    </Text>
+                    {apt.service ? <Text style={styles.aptService} numberOfLines={1}>{apt.service}</Text> : null}
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </View>
+              </Pressable>
             ))
           )}
         </View>
+        <View style={{ height: 110 }} />
       </ScrollView>
     </View>
   );
 }
 
+function StatCard({ icon, value, label, tint }) {
+  return (
+    <View style={styles.statCard}>
+      <View style={[styles.statIcon, { backgroundColor: tint + '1A' }]}>
+        <Ionicons name={icon} size={18} color={tint} />
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function QuickAction({ icon, label, onPress, primary }) {
+  const handle = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress();
+  };
+  if (primary) {
+    return (
+      <Pressable style={({ pressed }) => [styles.actionWrap, pressed && styles.pressed]} onPress={handle}>
+        <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.action, shadows.gold]}>
+          <Ionicons name={icon} size={20} color={colors.textOnGold} />
+          <Text style={[styles.actionLabel, { color: colors.textOnGold }]}>{label}</Text>
+        </LinearGradient>
+      </Pressable>
+    );
+  }
+  return (
+    <Pressable style={({ pressed }) => [styles.actionWrap, pressed && styles.pressed]} onPress={handle}>
+      <View style={[styles.action, styles.actionSecondary]}>
+        <Ionicons name={icon} size={20} color={colors.primary} />
+        <Text style={[styles.actionLabel, { color: colors.text }]}>{label}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+  container: { flex: 1, backgroundColor: colors.background },
+  scrollContent: { paddingBottom: 20 },
+  hero: {
+    paddingTop: 64,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xxl,
+    borderBottomLeftRadius: radius.xxl,
+    borderBottomRightRadius: radius.xxl,
   },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: spacing.xl,
-    paddingTop: 60,
-  },
-  header: {
+  heroTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xxl,
+    alignItems: 'flex-start',
   },
-  greeting: {
-    ...typography.h1,
-    color: colors.text,
+  brandRow: { flexDirection: 'row', alignItems: 'center' },
+  brand: { fontFamily: fonts.displayBold, fontSize: 26, color: colors.text, letterSpacing: 0.5 },
+  greeting: { ...typography.bodySecondary, marginTop: 4 },
+  logoBadge: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.primaryFaded,
+    borderWidth: 1, borderColor: colors.borderGold,
+    alignItems: 'center', justifyContent: 'center',
   },
   dateText: {
-    ...typography.bodySecondary,
-    marginTop: spacing.xs,
+    ...typography.caption,
+    color: colors.textSecondary,
     textTransform: 'capitalize',
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
   },
-  addButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
+  nextCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    ...shadows.gold,
+    backgroundColor: 'rgba(200,168,100,0.08)',
+    borderWidth: 1,
+    borderColor: colors.borderGold,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
   },
+  nextLeft: { flex: 1 },
+  nextLabel: { ...typography.label, color: colors.primary, marginBottom: 6 },
+  nextName: { fontFamily: fonts.heading, fontSize: 18, color: colors.text },
+  nextService: { ...typography.bodySecondary, marginTop: 2 },
+  nextTime: { alignItems: 'flex-end', gap: 4 },
+  nextTimeText: { fontFamily: fonts.displayBold, fontSize: 22, color: colors.primary },
+  nextCardEmpty: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: radius.lg, padding: spacing.lg,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  nextEmptyText: { ...typography.bodySecondary },
   statsRow: {
     flexDirection: 'row',
     gap: spacing.md,
-    marginBottom: spacing.xxl,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.xl,
   },
   statCard: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  statCardPrimary: {
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.primaryFaded,
-  },
-  statNumber: {
-    ...typography.h1,
-    color: colors.text,
-  },
-  statLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  section: {
-    marginBottom: spacing.xxl,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  sectionTitle: {
-    ...typography.h3,
-  },
-  seeAll: {
-    ...typography.bodySecondary,
-    color: colors.primary,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxxl,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-  },
-  emptyText: {
-    ...typography.bodySecondary,
-    marginTop: spacing.md,
-  },
-  emptyButton: {
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.primaryFaded,
-    borderRadius: borderRadius.md,
-  },
-  emptyButtonText: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  appointmentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
+    borderColor: colors.border,
     padding: spacing.lg,
+    alignItems: 'flex-start',
+  },
+  statIcon: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  timeBlock: {
-    width: 55,
-    marginRight: spacing.md,
+  statValue: { fontFamily: fonts.displayBold, fontSize: 26, color: colors.text },
+  statLabel: { ...typography.caption, marginTop: 2 },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.md,
   },
-  timeText: {
-    ...typography.h3,
-    color: colors.primary,
-    fontSize: 16,
+  actionWrap: { flex: 1 },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: 16,
+    borderRadius: radius.full,
   },
-  timeEndText: {
-    ...typography.caption,
-    marginTop: 2,
+  actionSecondary: {
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  appointmentInfo: {
+  actionLabel: { fontFamily: fonts.heading, fontSize: 14 },
+  section: { marginTop: spacing.xxl, paddingHorizontal: spacing.xl },
+  sectionHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  sectionTitle: { fontFamily: fonts.displayBold, fontSize: 22, color: colors.text },
+  seeAll: { ...typography.body, color: colors.primary, fontFamily: fonts.semibold },
+  aptRow: { flexDirection: 'row', marginBottom: spacing.xs },
+  timeCol: { width: 54, alignItems: 'center' },
+  timeText: { fontFamily: fonts.heading, fontSize: 14, color: colors.primary, marginBottom: 6 },
+  timeDone: { color: colors.success },
+  timeTrack: { flex: 1, alignItems: 'center' },
+  timeDot: { width: 9, height: 9, borderRadius: 5, marginTop: 2 },
+  timeLine: { width: 2, flex: 1, backgroundColor: colors.border, marginTop: 2 },
+  aptCard: {
     flex: 1,
-  },
-  appointmentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  appointmentDetails: {
-    flex: 1,
-  },
-  clientName: {
-    ...typography.body,
-    fontWeight: '600',
-  },
-  serviceText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: spacing.sm,
-  },
+  aptCardDone: { opacity: 0.6 },
+  aptInfo: { flex: 1 },
+  aptName: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  guestTag: { fontFamily: fonts.body, fontSize: 11, color: colors.textMuted },
+  strike: { textDecorationLine: 'line-through', color: colors.textMuted },
+  aptService: { ...typography.caption, marginTop: 2 },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
 });

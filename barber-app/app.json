@@ -1,35 +1,46 @@
 {
   "expo": {
-    "name": "Barber Pro",
-    "slug": "barber-pro",
+    "name": "Trimmer",
+    "slug": "trimmer",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "backgroundColor": "#0A0A0B",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0D0D0D"
+      "backgroundColor": "#0A0A0B"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.barberpro.app"
+      "bundleIdentifier": "com.trimmer.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0D0D0D"
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundColor": "#0A0A0B"
       },
-      "package": "com.barberpro.app",
+      "package": "com.trimmer.app",
       "versionCode": 1
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#C8A864"
+        }
+      ],
+      "expo-splash-screen"
     ],
     "extra": {
       "eas": {
-        "projectId": "barber-pro-local"
+        "projectId": "trimmer-local"
       }
     }
   }
